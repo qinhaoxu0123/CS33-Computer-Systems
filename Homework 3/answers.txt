@@ -1,0 +1,72 @@
+
+3.67
+A. 
+Stack Frame:
+High Address
+—————————————————————
+return address   104|
+—————————————————————
+z                 24|
+—————————————————————
+Argument 3 = z    24|
+—————————————————————
+z    |  y     |   x | 
+16   |  8     |   0 |
+—————————————————————
+Low Address
+B.
+The evals pass the object of StrB in its call to process and based the value of the address( rsp + 64).
+C.
+since it is in the stack pointer rsp, it reads 8 bytes at a time and is subtracted by 8 to store return address:
+s.a[0]: rsp+8
+s.a[1]: rsp+16
+s.p:  rsp+24
+D.
+it set the structure r to:
+
+rdi == rax: y
+rdi + 8: x
+rdi +16 : z
+
+E.
+High Address
+—————————————————————
+return address   104|
+—————————————————————
+rsp+96              |
+—————————————————————
+rsp+88              |
+—————————————————————
+r.q = z     rsp+80  |
+—————————————————————
+r.u[1]=x     rsp+72 |
+—————————————————————
+r.u[0]=y rsp+64,rdi,rax|
+—————————————————————
+z                 24|
+—————————————————————
+Argument 3 = z    24|
+—————————————————————
+z    |  y     |   x | 
+16   |  8     |   0 |
+—————————————————————
+Low Address
+
+
+F.
+The general principle, structure passed as function arguments are in the form of address and return as function result are also in the form of addresses. Once we have caller and callee, the caller will allocate enough space for the callee, thus whenever callee weigh called, it will store all the local variables and include the address of the lass call, thus it can resume after callee finishes the call and return the value to the caller and continue to execute the program.
+
+
+3.70
+A
+el.p=0
+el.y=8
+el.x=0
+e2.next=8
+B.
+e1 16 bytes
+e2 16 bytes
+C.
+void proc (union ele*up) {
+up->e2.x= *(up->e2.next->e1.p)- up->e2.next->e1.y;
+}

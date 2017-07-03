@@ -1,0 +1,62 @@
+Qinhao Xu
+UID: 704439324
+
+Gather Instruction traces 
+
+Command:
+gdb ~eggert/bin64/bin/emacs-25.2
+
+I used this command to enter the GDB debugger and examine the emacs-25.2
+
+In the GDB:
+
+command:
+(gdb) break Ftimes 
+Breakpoint 1 at 0x547ad0: file data.c, line 2815.
+
+I used this command to set a breakpoint on the function Ftimes and then we can step in to examine the Ftimes functions
+
+(gdb) set disassemble-next-line on 
+I used this command to ask the gdb to get the assembly-language for the function Ftimes after encounter the breakpoint, however it did not work. 
+
+So I tried
+(gdb) disas /m Ftimes 
+Dump of assembler code for function Ftimes:
+2815	{
+   0x0000000000547ad0 <+0>:	mov    %rsi,%rdx
+
+2816	  return arith_driver (Amult, nargs, args);
+   0x0000000000547ad3 <+3>:	mov    %rdi,%rsi
+   0x0000000000547ad6 <+6>:	mov    $0x2,%edi
+   0x0000000000547adb <+11>:	jmpq   0x5477d0 <arith_driver>
+
+End of assembler dump.
+
+I used this command to ask the gdb to dump of assembler code for function Ftimes and now I am able to see the assembly language for the function Ftimes.
+
+(gdb) set logging on 
+I used this command to record the output from the gdb to a gdb.txt file
+
+
+(gdb) r -batch -eval '(print(* 1250284240 -1844255039))'
+I ran the program with the correct arguments 
+
+(gdb) si
+I used this to step in the function Ftimes and can see that the pointer 
+2816	  return arith_driver (Amult, nargs, args);
+=> 0x0000000000547ad3 <Ftimes+3>:	48 89 fe	mov    %rdi,%rsi
+   0x0000000000547ad6 <Ftimes+6>:	bf 02 00 00 00	mov    $0x2,%edi
+   0x0000000000547adb <Ftimes+11>:	e9 f0 fc ff ff	jmpq   0x5477d0 <arith_driver>
+
+(gdb) info registers $r_
+I used this command to get the value and address.
+
+//Examine Integer overflow 
+gcc -c [flag] testovf.c
+
+I used -o2, -o2 -fwrapv and  —o2 fsanitize=undefined as flags
+
+and then use the command objdump -d testovf.o > [name].txt
+
+
+

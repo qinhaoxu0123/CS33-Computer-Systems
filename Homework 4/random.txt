@@ -1,0 +1,53 @@
+Qinhao Xu
+704439324
+A. 
+True
+There is no loss of information when we convert int to double, because double has greater range and precision that can handle the int. Assume Fwrap, the number might be rounded when we convert int to float; however it will the same rounding behavior as converting the double dx to a float.
+
+B.
+False
+There is no loss of information when we convert int to double, because double has greater range and precision that can handle the int; however assume that we have  x=INT_MIN, and y =1 then the result will overflow, if we assume -fwrap, then the result of x-y will have the positive number.  Because of the greater range and precision when we convert int to double, (dx-dy) will give us the correct result of this operations
+
+C.
+True
+although associativity property do not hold floating point, however, it this case, it will be true, because double have much greater range than the integer, even if dx, dy and dz all have INT_MAX / INT_MIN, addition  will not cause any trouble to the result.  So this is true.
+
+D.
+false
+Unlike, when we do multiplication, there is a chance that it requires precision exceed that of the doubles.
+
+Assume we have the following number in two complement:
+
+int x= 2^31 +1; 
+int y= 2^31 +1;
+int z = 2^31 + 2^7;
+
+then 
+LHS= [(2^31 +1) * (2^31 +1)] * (2^31 + 2^7)
+   = (2^60 + 2^31 + 0 /*1 round to even*/) * (2^31 + 2^7)
+   = 2^90 *(1 + 2^-23 + 2^-29v+ (2 ^-51 + 0 * 2 ^-52) /* 2^-52 + 2^-83 round to even */)
+   = 2^90 * (1+ 2^-23 + 2^-29 + 2^-51)
+
+RHS= (2^31 +1) * [(2^31 +1) * (2^31 + 2^7)]
+   =  (2^31+1) * ( 2^60 + 2^37 + 2^30 +0 /* 2^7 round to even */)
+   =  2^90 * ( 1+2^-23 + 2^-29+0 /* 2^-53 + 2^-59 round to even */)
+   = 2^90 * (1 + 2^-23 + 2^-29)
+
+thus LHS != RHS
+
+E. False
+
+if dx =0  and dz  =  1 then 
+
+LHS = NaN
+RHS =  1
+
+LHS != RHS
+
+
+
+
+
+
+
+ 

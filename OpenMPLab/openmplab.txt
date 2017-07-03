@@ -1,0 +1,138 @@
+
+$ tar -xf openmplab.tar
+
+$ make seq GPROF=1
+gcc -o seq -02 -pg filter.c main.c func.c util.c -lm
+
+$ ./seq
+
+FUNC TIME : 0.854923
+TOTAL TIME : 3.160546
+
+$ gprof seq
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 71.52      0.60     0.60       15    40.05    41.64  func1
+ 14.90      0.73     0.13  5177344     0.00     0.00  rand2
+  3.58      0.76     0.03   491520     0.00     0.00  findIndexBin
+  3.58      0.79     0.03        1    30.04   131.44  addSeed
+  2.38      0.81     0.02        2    10.01    10.01  init
+  1.19      0.82     0.01       16     0.63     0.63  dilateMatrix
+  1.19      0.83     0.01       15     0.67     0.67  func2
+  1.19      0.84     0.01                             sequence
+  0.60      0.84     0.01       15     0.33     0.33  rand1
+  0.00      0.84     0.00   983042     0.00     0.00  round
+  0.00      0.84     0.00       15     0.00     0.00  func3
+  0.00      0.84     0.00       15     0.00     0.00  func4
+  0.00      0.84     0.00       15     0.00     2.00  func5
+  0.00      0.84     0.00        2     0.00     0.00  get_time
+  0.00      0.84     0.00        1     0.00     0.00  elapsed_time
+  0.00      0.84     0.00        1     0.00     0.00  fillMatrix
+  0.00      0.84     0.00        1     0.00     0.00  func0
+  0.00      0.84     0.00        1     0.00     0.00  getNeighbors
+  0.00      0.84     0.00        1     0.00    10.01  imdilateDisk
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+From above the profile we can see the func1 has the most running times, thus I will focus on this function and rest of the function as well.
+
+Step 1:
+look through each for loop, find out the static variables:
+declare local variable to hold that value,
+
+Before:
+ for(i = 0; i<n; i++){
+                for(j = 0; j < Ones; j++){
+                        index_X = round(arrayX[i]) + objxy[j*2 + 1];
+                        index_Y = round(arrayY[i]) + objxy[j*2];
+                        index[i*Ones + j] = fabs(index_X*Y*Z + index_Y*Z + iter\
+);
+                        if(index[i*Ones + j] >= max_size)
+                                index[i*Ones + j] = 0;
+
+After:
+for(i = 0; i<n; i++){
+          o_i= i*Ones;
+                for(j = 0; j < Ones; j++){
+                  j_j = j*2;
+                        index_X = round(arrayX[i]) + objxy[j_j + 1];
+                        index_Y = round(arrayY[i]) + objxy[j_j];
+                        v = fabs(index_X*Y*Z + index_Y*Z + iter);
+                        index[o_i + j] = (v>= max_size)? 0:v;
+this will decrese the computational expense, because you are not computing the same variable each time in the loop.
+do that for other functions as well.
+
+step 2:
+using omp to parallelized the for loop with number of threads 18
+you can change the num of threads however, as the threads increase the running time is inconsistent.
+15~20 threads is good for this case.
+
+step 3:
+firstprivate and private variables in side the loop.
+
+After modfied the func.c 
+run the commands again:
+
+$ make clean
+$ make omp
+$ ./omp
+
+FUNC TIME : 0.063912
+TOTAL TIME : 2.158606
+
+To check correctness :
+
+$ make check
+gcc -o omp  -O3 -fopenmp filter.c main.c func.c util.c -lm
+cp omp filter
+./filter
+FUNC TIME : 0.066960
+TOTAL TIME : 1.951464
+diff --brief correct.txt output.txt
+
+To check memory leak:
+
+$ make omp MTRACE=1
+$ make checkmem
+
+mtrace filter mtrace.out || true
+
+Memory not freed:
+-----------------
+           Address     Size     Caller
+0x0000000001ed3070   0x1470  at 0x7f074ec47869
+0x0000000001ed44f0     0xc0  at 0x7f074ec47869
+0x0000000001ed45c0     0x98  at 0x7f074ec478b9
+0x0000000001ed4660    0x240  at 0x7f074f177c25
+0x0000000001ed48b0    0x240  at 0x7f074f177c25
+0x0000000001ed4b00    0x240  at 0x7f074f177c25
+0x0000000001ed4d50    0x240  at 0x7f074f177c25
+0x0000000001ed4fa0    0x240  at 0x7f074f177c25
+0x0000000001ed51f0    0x240  at 0x7f074f177c25
+0x0000000001ed5440    0x240  at 0x7f074f177c25
+0x0000000001ed5690    0x240  at 0x7f074f177c25
+0x0000000001ed58e0    0x240  at 0x7f074f177c25
+0x0000000001ed5b30    0x240  at 0x7f074f177c25
+0x0000000001ed5d80    0x240  at 0x7f074f177c25
+0x0000000001ed5fd0    0x240  at 0x7f074f177c25
+0x0000000001ed6220    0x240  at 0x7f074f177c25
+0x0000000001ed6470    0x240  at 0x7f074f177c25
+0x0000000001ed66c0    0x240  at 0x7f074f177c25
+0x0000000001ed6910    0x240  at 0x7f074f177c25
+0x0000000001ed6b60    0x240  at 0x7f074f177c25
+
+why it that?
+"There are some dynamically allocated global variables injected into our code by OpenMP. 
+These are really freed after the process has been completely exited and so they are not under our control." Piazza
+
+Calculate for the speed
+
+T0 = 0.854923
+T1 = 0.066960
+
+speedup =  T0/T1 = 12.77x
+

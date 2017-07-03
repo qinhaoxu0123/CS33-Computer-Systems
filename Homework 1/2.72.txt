@@ -1,0 +1,12 @@
+2.72
+A. 
+since the sizeof operator returns a value of type size_t is unsigned int, and the maxbytes is signed int, the maxbytes will implicitly cast to a unsigned int in order to do the subtraction. Thus the result of the subtraction will always between 0 and a positive number, which the conditional test will always works in this function.
+B.
+Since the result is always unsigned int, in order to make it work properly 
+void copy_int(int val, void *buf, int maxbytes)
+{
+	if(maxbytes-（int)sizeof(val)>=0)
+	{
+	   memcpy(buf, (void*) &val, sizeof(val));
+	   }
+}

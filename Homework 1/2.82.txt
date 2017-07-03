@@ -1,0 +1,68 @@
+2.82
+A.
+False
+int x= Int_Min;
+int y= 1;
+
+Casting from int to unsigned int changed the numeric value, but not the bit representation.
+According the conversation from two’s compliment to unsigned T2U(x)=x+2^w, x<0;
+T2U(Int_Min)= Int_Min+2^32 equals to a positive number.
+LHS= x<y; ture
+RHS= -Int_Min > -1; false
+thus not always yield 1;
+
+B.
+True
+LHS= x+y<<y-x+4;
+RHS= (2^4+2^0)*y+(2^4-2^0)*x
+   =  2^4*y+2^0*y+2^4*x-2^0*x
+   =  2^4(x+y)+(y-x)
+   =  x+y<<y-x+4
+
+LHS==RHS
+
+C.
+True;
+x + ~x +1 == 0;
+~x = -x-1;
+y + ~y +1 ==0;
+~y = -y-1;
+
+LHS: (-x-1)+(-y-1)+1=-x-1-y-1+1=-x-y-1
+RHS: ~x+~y= -x-1-y-1+1=-x-y-1;
+
+LHS==RHS;
+
+D.
+True;
+Casting from int to unsigned int changed the numeric value, but not the bit representation.
+((unsigned)ux-(unsigned)uy) ==  -((unsigned)y-(unsigned)x)
+LHS=ux-uy;
+RHS=-(y-x)=x-y;
+LHS==RHS;
+
+E.
+True;
+Let x denote the bit vector[x31,x30………x2,x1,x0] represents a 32 bit value; It shifts 2 to the right, which equals to [0,0,x31………x2] and then shifts 2 to the left, which equals to [x31, x30, x29……x2,0,0] thus the final product of the shift is less and equals to the x, because 0 is less than the x1 and x0 when we first started the bit vector. 
+
+F.
+False;
+Casting from int to unsigned int changed the numeric value, but not the bit representation.
+LHS:
+let x denotes [11000……11] that has 32 bits, it shifts one to the right we get [011………1]
+RHS:
+step 1: let ux also denotes [11000……11], it shifts one to the right we get[011………1],
+step 2: since -1 denotes [1111….11], it shift 31 to the right [1000000000…000].
+step 3: we apply bitwise operator & of result from step 1 and step 2, we get [011…..1]
+Thus, LHS does not equal to RHS. 
+
+G.
+False
+Let x equals to a negative number  
+LHS: a negative number mod a positive will get a negative number
+RHS: since the 127 is a positive number and its bit representation in 32 bit start with the leading 0 [010000101…..000], however whatever negative number we pick we will have 1 as the leading bit that represents the number is negative, thus when we apply the bitwise operator & we will get the 0 as the leading bit which also means it is a positive number.
+
+LHS does not equal to RHS.
+
+
+

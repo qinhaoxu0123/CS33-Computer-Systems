@@ -1,0 +1,22 @@
+12.18
+a. unsafe
+b. safe
+c. unsafe
+
+12.24
+The functions are either implicitly reentrant or non-reentrant.
+
+Although the functions of RIO are thread-safe, they are not explicitly reentrant, which there is not a explicit form in C language that can interrupt the current execution and then resume again before the previous execution ends.
+
+Since all the RIO functions takes pointer as the arguments:
+
+1. The caller does not pass the address of shared data (global , static or stack pointer), then the functions are implicitly reentrant. 
+
+2. The caller passes the address of any share data (global, static or stack pointer as the pointer argument),  then the function are implicitly non-reentrant.
+
+In the RIO I/O package, the functions does not pass the address of shared data, thus the functions are implicitly reentrant. 
+
+
+
+
+
